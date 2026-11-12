@@ -2,7 +2,7 @@ DESCRIPTION = "Linux kernel for the RZ/V2H based board"
 
 COMPATIBLE_MACHINE_rzv2h = "(onekiwi-rzv2h-dev|onekiwi-rzv2h-8gb|onekiwi-rzv2h-16gb|rzv2h-dev|rzv2h-evk-alpha|rzv2h-evk-ver1)"
 
-KERNEL_URL = "git://github.com/OneKiwiEmbedded/renesas-rz-linux.git"
+KERNEL_URL = "git://github.com/OneKiwiEmbedded/renesas-rz-linux-4.git"
 BRANCH = "sdk-v5.20-rzv2h-5.10-cip17"
 SRCREV = "${AUTOREV}"
 
