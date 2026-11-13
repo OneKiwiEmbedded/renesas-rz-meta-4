@@ -41,3 +41,15 @@ cp ../meta-renesas/meta-onekiwi/conf/templates/onekiwi-rzv2h-8gb/*.conf conf/
 bitbake core-image-weston
 ```
 For 4GB use `onekiwi-rzv2h-4gb`.
+
+## Variant: 4GB board with Arducam IMX415 + ADV7535 (2 DSI lanes)
+
+Branch `sdk60-imx415-arducam-adv-4gb`. Applies only to `MACHINE = "onekiwi-rzv2h-4gb"`; 8GB is unchanged.
+
+| File | Content |
+|---|---|
+| `recipes-kernel/linux/linux-renesas/0001-onekiwi-rzv2h-4gb-adv7535-2-dsi-lanes.patch` | DTS: `data-lanes = <1 2>`, `adi,dsi-lanes = <2>` (HDMI up to ~1280x800@60) |
+| `recipes-kernel/linux/linux-renesas/onekiwi-rzv2h-4gb-udl.cfg` | `CONFIG_DRM_UDL=m` (USB-to-HDMI adapters) |
+| `dynamic-layers/meta-rz-isp/recipes-kernel/linux/files/0002-onekiwi-rzv2h-4gb-imx415-arducam.patch` | Arducam IMX415 (24 MHz, I2C 0x37, CSI20, 720 Mbps/lane): imx415.c, rzg2l-csi2.c (720 Mbps), rzg2l-dma.c (400 ms waits), ISP IMX415_drv.c (LANE_MBPS 720), DTS camera + ISP nodes |
+
+The Arducam patch needs `meta-rz-features/meta-rz-isp` (it provides the IMX415 and ISP drivers) and is applied at the end of `do_patch`, after the meta-rz-isp patches.

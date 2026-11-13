@@ -1,0 +1,363 @@
+From 7d536b438339f7ab494fb28c57a47cc91072e6d3 Mon Sep 17 00:00:00 2001
+From: quangdinhxuan <quangcoi186@gmail.com>
+Date: Fri, 13 Nov 2026 10:08:13 +0700
+Subject: [PATCH] media: imx415: support Arducam IMX415 module on
+ onekiwi-rzv2h-4gb (SDK 6.0)
+
+Port of the OneKiwi SDK v5.20 Arducam IMX415 support to Linux 6.1 +
+meta-rz-isp (applies after the meta-rz-isp kernel patches).
+
+Arducam IMX415 module: 24 MHz INCK, I2C address 0x37, one camera on
+CSI20 / CRU0, 4 lanes at 720 Mbps/lane (RAW12, 25 fps).
+
+imx415.c (meta-rz-isp version, 3-way merge of the SDK v5.20 changes):
+- clock params for 24 MHz INCK (720 and 1440 Mbps), mode 4-lane 720 Mbps
+  25 fps (HMAX 0x0500, pixel_rate 247.5 MHz)
+- write clk_params and mode registers at stream start
+- wait 200 ms before releasing XCLR (datasheet power-on sequence)
+
+rzg2l-dma.c: longer waits (400 ms) in the CRU stop paths (as SDK v5.20).
+
+rzv2h-isp IMX415_drv.c: LANE_MBPS 720 (the CRU sets the D-PHY rate from
+this value when the ISP is used).
+
+rzg2l-csi2.c: force D-PHY to 720 Mbps when the rate computed from
+pixel_rate is 730..750 Mbps with 4 lanes (742 Mbps computed).
+
+onekiwi-rzv2h-4gb.dts: clk_ext_camera 24 MHz, imx415a@37 on i2c6_csi0
+(reset P3_0, link-frequencies 360 MHz), camera power hog P3_1 high,
+ISP enabled for imx415a, input_video_control crus = <&cru0 &cru1> (as SDK v5.20),
+iq, isp, lens, sensor.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../boot/dts/renesas/onekiwi-rzv2h-4gb.dts    |  43 ++++---
+ drivers/media/i2c/imx415.c                    | 109 +++++++++++++++---
+ .../platform/renesas/rzg2l-cru/rzg2l-csi2.c   |   9 ++
+ .../platform/renesas/rzg2l-cru/rzg2l-dma.c    |   4 +-
+ .../sensor/src/driver/sensor/IMX415_drv.c     |   4 +-
+ 5 files changed, 130 insertions(+), 39 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/onekiwi-rzv2h-4gb.dts b/arch/arm64/boot/dts/renesas/onekiwi-rzv2h-4gb.dts
+index 779794009..09b33ee42 100644
+--- a/arch/arm64/boot/dts/renesas/onekiwi-rzv2h-4gb.dts
++++ b/arch/arm64/boot/dts/renesas/onekiwi-rzv2h-4gb.dts
+@@ -168,7 +168,7 @@ clk_32k: osc32k {
+ 	clk_ext_camera: clk_ext_camera {
+  		compatible = "fixed-clock";
+  		#clock-cells = <0>;
+-		clock-frequency = <74250000>;
++		clock-frequency = <24000000>;	/* Arducam IMX415 module: 24 MHz INCK */
+  	};
+  
+ 	imx415_ovdd_1v8: 1p8v {
+@@ -594,11 +594,21 @@ &csi21 {
+ 	status = "disabled";
+ };
+ 
+-&cru1 {
+-	status = "disabled";
++/* ISP (meta-rz-isp): one Arducam IMX415 on CSI20, CRU0 + CRU1 as SDK v5.20 */
++&input_video_control {
++	status = "okay";
++	crus = <&cru0 &cru1>;
++};
++
++&iq {
++	status = "okay";
+ };
+ 
+-/* ISP nodes (input_video_control, iq, isp, lens, sensor) removed: build without meta-rz-isp */
++&isp {
++	sensor-i2c = <&imx415a>;
++	sensor-default-preset-mode = <0>;
++	status = "okay";
++};
+ 
+ &i2c1 {
+ 	pinctrl-0 = <&i2c1_pins>;
+@@ -674,22 +684,23 @@ adv7535_out: endpoint@1 {
+ &i2c6_csi0 {
+ 	status = "okay";
+ 
+-	imx415a: imx415@1a {
++	imx415a: imx415@37 {
+ 		compatible = "sony,imx415";
+-		reg = <0x1a>;
++		reg = <0x37>;	/* Arducam IMX415 I2C address */
+ 		status = "okay";
+ 		clock-names = "inck";
+ 		clocks = <&clk_ext_camera>;
+ 		ovdd-supply = <&imx415_ovdd_1v8>;
+ 		avdd-supply = <&imx415_avdd_2v9>;
+ 		dvdd-supply = <&imx415_dvdd_1v1>;
+-		reset-gpios = <&pinctrl RZG2L_GPIO(3, 1) GPIO_ACTIVE_LOW>;
++		reset-gpios = <&pinctrl RZG2L_GPIO(3, 0) GPIO_ACTIVE_LOW>;	/* XCLR (as SDK v5.20) */
+ 
+ 		port {
+ 			imx415a_to_csi20: endpoint {
+ 				clock-lanes = <0>;
+ 				data-lanes = <1 2 3 4>;
+-				link-frequencies = /bits/ 64 <445500000 445500000 445500000 445500000>;
++				/* 720 Mbps/lane (24 MHz INCK mode in imx415.c) */
++				link-frequencies = /bits/ 64 <360000000 360000000 360000000 360000000>;
+ 				remote-endpoint = <&csi20_in>;
+ 			};
+ 		};
+@@ -743,11 +754,9 @@ &i2c9_csi2 {
+ 	status = "okay";
+ };
+ 
+-/*
+ &lens {
+ 	status = "okay";
+ };
+-*/
+ 
+ &ohci0 {
+ 	memory-region = <&global_cma>;
+@@ -863,11 +872,9 @@ &sci3 {
+ 	status = "okay";
+ };
+ 
+-/*
+ &sensor {
+ 	status = "okay";
+ };
+-*/
+ 
+ /* eMMC */
+ &sdhi0 {
+@@ -1068,12 +1075,12 @@ partition@200000 {
+ 
+ &pinctrl {
+ 	/* cam0_pwr_en is used by Google Coral Camera from CSI20 and CSI21 */
+-	// cam0_pwr_en {
+-	// 	gpio-hog;
+-	// 	gpios = <RZG2L_GPIO(3, 1) GPIO_ACTIVE_HIGH>;
+-	// 	output-high;
+-	// 	line-name = "cam0_pwr_en";
+-	// };
++	cam0_pwr_en {	/* camera power enable (as SDK v5.20) */
++		gpio-hog;
++		gpios = <RZG2L_GPIO(3, 1) GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "cam0_pwr_en";
++	};
+ 
+ 	can2_pins: can2 {
+ 		pinmux = <RZG2L_PORT_PINMUX(8,5,5)>, /* CAN2_RX */
+diff --git a/drivers/media/i2c/imx415.c b/drivers/media/i2c/imx415.c
+index 2e7212e09..42c18bf01 100644
+--- a/drivers/media/i2c/imx415.c
++++ b/drivers/media/i2c/imx415.c
+@@ -129,27 +129,42 @@ struct imx415_clk_params {
+ /* INCK Settings - includes all lane rate and INCK dependent registers */
+ static const struct imx415_clk_params imx415_clk_params[] = {
+ 	{
+-		.lane_rate = 891000000,
+-		.inck = 74250000,
+-		.regs[0] = { IMX415_BCWAIT_TIME, 0x0FF },
+-		.regs[1] = { IMX415_CPWAIT_TIME, 0x0B6 },
+-		.regs[2] = { IMX415_SYS_MODE, 0x5 },
++		.lane_rate = 720000000,
++		.inck = 24000000,
++		.regs[0] = { IMX415_BCWAIT_TIME, 0x054 },
++		.regs[1] = { IMX415_CPWAIT_TIME, 0x03B },
++		.regs[2] = { IMX415_SYS_MODE, 0x9 },
+ 		.regs[3] = { IMX415_INCKSEL1, 0x00 },
+-		.regs[4] = { IMX415_INCKSEL2, 0x28 },
+-		.regs[5] = { IMX415_INCKSEL3, 0x0C0 },
+-		.regs[6] = { IMX415_INCKSEL4, 0x0E0 },
+-		.regs[7] = { IMX415_INCKSEL5, 0x28 },
++		.regs[4] = { IMX415_INCKSEL2, 0x23 },
++		.regs[5] = { IMX415_INCKSEL3, 0x0B4 },
++		.regs[6] = { IMX415_INCKSEL4, 0x0FC },
++		.regs[7] = { IMX415_INCKSEL5, 0x23 },
+ 		.regs[8] = { IMX415_INCKSEL6, 0x0 },
+ 		.regs[9] = { IMX415_INCKSEL7, 0x1 },
+-		.regs[10] = { IMX415_TXCLKESC_FREQ, 0x1290 },
++		.regs[10] = { IMX415_TXCLKESC_FREQ, 0x0600 },
++	},
++	{
++		.lane_rate = 1440000000,
++		.inck = 24000000,
++		.regs[0] = { IMX415_BCWAIT_TIME, 0x054 },
++		.regs[1] = { IMX415_CPWAIT_TIME, 0x03B },
++		.regs[2] = { IMX415_SYS_MODE, 0x8 },
++		.regs[3] = { IMX415_INCKSEL1, 0x00 },
++		.regs[4] = { IMX415_INCKSEL2, 0x23 },
++		.regs[5] = { IMX415_INCKSEL3, 0x0B4 },
++		.regs[6] = { IMX415_INCKSEL4, 0x0FC },
++		.regs[7] = { IMX415_INCKSEL5, 0x23 },
++		.regs[8] = { IMX415_INCKSEL6, 0x1 },
++		.regs[9] = { IMX415_INCKSEL7, 0x0 },
++		.regs[10] = { IMX415_TXCLKESC_FREQ, 0x0600 },
+ 	},
+ };
+ 
+-/* all-pixel 4-lane 720 Mbps 15.74 Hz mode */
++/* all-pixel 4-lane 720 Mbps 25.00 Hz mode */
+ static const struct imx415_reg imx415_mode_4_720[] = {
+ 	{ IMX415_VMAX, 0x08CA },
+-	{ IMX415_HMAX, 0x07F0 },
+-	{ IMX415_LANEMODE, IMX415_LANEMODE_4 }, /* CHECKME: was LANEMODE_2 */
++	{ IMX415_HMAX, 0x0500 },
++	{ IMX415_LANEMODE, IMX415_LANEMODE_4 },
+ 	{ IMX415_TCLKPOST, 0x006F },
+ 	{ IMX415_TCLKPREPARE, 0x002F },
+ 	{ IMX415_TCLKTRAIL, 0x002F },
+@@ -237,13 +252,13 @@ struct imx415_mode {
+ /* mode configs */
+ static const struct imx415_mode supported_modes[] = {
+ 	{
+-		.lane_rate = 891000000,
++		.lane_rate = 720000000,
+ 		.lanes = 4,
+ 		.hmax_pix = 4400,
+-		.pixel_rate = 297000000,
++		.pixel_rate = 247500000,
+ 		.reg_list = {
+-			.num_of_regs = ARRAY_SIZE(imx415_mode_4_891),
+-			.regs = imx415_mode_4_891,
++			.num_of_regs = ARRAY_SIZE(imx415_mode_4_720),
++			.regs = imx415_mode_4_720,
+ 		},
+ 	},
+ };
+@@ -617,9 +632,59 @@ static int imx415_set_mode(struct imx415 *sensor, int mode)
+ 	return 0;
+ }
+ 
++/*
++ * ONEKIWI FIX: clk_params->regs[] (INCK/PLL settings) and
++ * supported_modes[].reg_list (VMAX/HMAX/LANEMODE/D-PHY timing) were parsed
++ * in imx415_parse_hw_config() but never actually written to the sensor.
++ * Without this, the chip runs on its power-on-reset defaults, which happen
++ * to match the 74.25MHz INCK family and never match a 24MHz INCK config.
++ */
++static int imx415_write_regs(struct imx415 *sensor, const struct imx415_reg *regs,
++			     unsigned int num_regs)
++{
++	unsigned int i;
++	int ret;
++
++	for (i = 0; i < num_regs; i++) {
++		ret = imx415_write(sensor, regs[i].address, regs[i].val);
++		if (ret)
++			return ret;
++	}
++
++	return 0;
++}
++
+ static int imx415_setup(struct imx415 *sensor, struct v4l2_subdev_state *state)
+ {
+-	return imx415_set_mode(sensor, sensor->cur_mode);
++	int ret;
++
++	ret = imx415_set_mode(sensor, sensor->cur_mode);
++	if (ret)
++		return ret;
++
++	dev_info(sensor->dev,
++		"ONEKIWI FIX ACTIVE: writing %d clk_params regs (lane_rate=%llu inck=%llu) + %d mode regs\n",
++		IMX415_NUM_CLK_PARAM_REGS, sensor->clk_params->lane_rate,
++		sensor->clk_params->inck,
++		supported_modes[sensor->cur_mode].reg_list.num_of_regs);
++
++	ret = imx415_write_regs(sensor, sensor->clk_params->regs,
++				IMX415_NUM_CLK_PARAM_REGS);
++	if (ret) {
++		dev_info(sensor->dev, "ONEKIWI FIX: clk_params write failed ret=%d\n", ret);
++		return ret;
++	}
++
++	ret = imx415_write_regs(sensor,
++				 supported_modes[sensor->cur_mode].reg_list.regs,
++				 supported_modes[sensor->cur_mode].reg_list.num_of_regs);
++	if (ret) {
++		dev_info(sensor->dev, "ONEKIWI FIX: mode reg_list write failed ret=%d\n", ret);
++		return ret;
++	}
++
++	dev_info(sensor->dev, "ONEKIWI FIX: all regs written OK\n");
++	return 0;
+ }
+ 
+ static int imx415_wakeup(struct imx415 *sensor)
+@@ -871,6 +936,14 @@ static int imx415_power_on(struct imx415 *sensor)
+ 	if (ret < 0)
+ 		return ret;
+ 
++	/* 
++	 * ONEKIWI HACK: Datasheet page 84 requires XCLR to be Low during power on,
++	 * and specifies: "XCLR can be High after 200 ms or more from the time 
++	 * when all power supplies are finished." 
++	 * The original driver missed this completely and brought it High immediately.
++	 */
++	msleep(200);
++
+ 	gpiod_set_value_cansleep(sensor->reset, 0);
+ 
+ 	udelay(1);
+diff --git a/drivers/media/platform/renesas/rzg2l-cru/rzg2l-csi2.c b/drivers/media/platform/renesas/rzg2l-cru/rzg2l-csi2.c
+index aa826f8ea..5f1764b9e 100644
+--- a/drivers/media/platform/renesas/rzg2l-cru/rzg2l-csi2.c
++++ b/drivers/media/platform/renesas/rzg2l-cru/rzg2l-csi2.c
+@@ -446,6 +446,15 @@ static int rzg2l_csi2_calc_mbps(struct rzg2l_csi2 *priv, unsigned int bpp)
+ 	mbps = v4l2_ctrl_g_ctrl_int64(ctrl) * bpp;
+ 	do_div(mbps, priv->lanes * 1000000);
+ 
++	/* ONEKIWI HACK: Fix PHY mismatch for IMX415 (Arducam, 24 MHz INCK).
++	 * The driver calculates 742 Mbps based on 247.5M pixel_rate (at RAW12 25fps),
++	 * but the sensor's PLL actually outputs 720 Mbps.
++	 * We force it to 720 Mbps here so the D-PHY locks correctly,
++	 * without changing pixel_rate (which would crash the ISP daemon).
++	 */
++	if (mbps > 730 && mbps < 750 && priv->lanes == 4)
++		mbps = 720;
++
+ 	return mbps;
+ }
+ 
+diff --git a/drivers/media/platform/renesas/rzg2l-cru/rzg2l-dma.c b/drivers/media/platform/renesas/rzg2l-cru/rzg2l-dma.c
+index de0fccd60..ca0681934 100644
+--- a/drivers/media/platform/renesas/rzg2l-cru/rzg2l-dma.c
++++ b/drivers/media/platform/renesas/rzg2l-cru/rzg2l-dma.c
+@@ -1060,7 +1060,7 @@ static void rzg2l_cru_stop(struct rzg2l_cru_dev *cru)
+ 		/* Wait for streaming to stop */
+ 		while (retries++ < 5) {
+ 			spin_unlock_irqrestore(&cru->qlock, flags);
+-			msleep(100);
++			msleep(400); // ONEKIWI HACK: Arducam patch (was 100)
+ 			spin_lock_irqsave(&cru->qlock, flags);
+ 		}
+ 	}
+@@ -1171,7 +1171,7 @@ static int retry_streaming_func(void *data)
+ 			if (cru->state == RUNNING)
+ 				goto retry_done;
+ 
+-			msleep(20);
++			msleep(400); // ONEKIWI HACK: Arducam patch (was 20)
+ 		}
+ 
+ 		/* Stop CRU reception */
+diff --git a/drivers/media/platform/renesas/rzv2h-isp/subdev/sensor/src/driver/sensor/IMX415_drv.c b/drivers/media/platform/renesas/rzv2h-isp/subdev/sensor/src/driver/sensor/IMX415_drv.c
+index a8aa7c292..e779ad7fb 100644
+--- a/drivers/media/platform/renesas/rzv2h-isp/subdev/sensor/src/driver/sensor/IMX415_drv.c
++++ b/drivers/media/platform/renesas/rzv2h-isp/subdev/sensor/src/driver/sensor/IMX415_drv.c
+@@ -39,7 +39,9 @@
+ #define DGAIN_PRECISION 8
+ 
+ #define PIXEL_CLOCK 74250000
+-#define LANE_MBPS 891
++/* ONEKIWI: Arducam IMX415 (24 MHz INCK) runs at 720 Mbps/lane (EVK module: 891).
++ * The CRU programs the CSI-2 D-PHY with this value when the ISP is used. */
++#define LANE_MBPS 720
+ #ifdef CONFIG_VIDEO_RZG2L_CRU_EMBEDDED_DATA
+ #define EMBEDDED_DATA_LINE 1
+ #else
+-- 
+2.50.1.windows.1
+

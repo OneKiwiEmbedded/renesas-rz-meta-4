@@ -1,0 +1,40 @@
+From 4d4cfd1f707be1794134c1f77905e5173786f96c Mon Sep 17 00:00:00 2001
+From: quangdinhxuan <quangcoi186@gmail.com>
+Date: Fri, 13 Nov 2026 10:07:34 +0700
+Subject: [PATCH 1/2] arm64: dts: renesas: onekiwi-rzv2h-4gb: use 2 DSI lanes
+ for ADV7535
+
+The ADV7535 carrier board used with the 4GB SOM only wires 2 MIPI DSI
+data lanes. Configure both the DSI output endpoint and the ADV7535
+(adi,dsi-lanes) for 2 lanes. Maximum HDMI mode is about 1280x800@60.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ arch/arm64/boot/dts/renesas/onekiwi-rzv2h-4gb.dts | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/renesas/onekiwi-rzv2h-4gb.dts b/arch/arm64/boot/dts/renesas/onekiwi-rzv2h-4gb.dts
+index cd6f528c1..779794009 100644
+--- a/arch/arm64/boot/dts/renesas/onekiwi-rzv2h-4gb.dts
++++ b/arch/arm64/boot/dts/renesas/onekiwi-rzv2h-4gb.dts
+@@ -498,7 +498,7 @@ ports {
+ 		port@1 {
+ 			dsi0_out: endpoint {
+ 				remote-endpoint = <&adv7535_in>;
+-				data-lanes = <1 2 3 4>;
++				data-lanes = <1 2>;	/* ADV7535 carrier board: only 2 DSI lanes wired */
+ 			};
+ 		};
+ 	};
+@@ -648,7 +648,7 @@ adv7535: hdmi@3d {
+ 		interrupt-parent = <&pinctrl>;
+ 		interrupts = <RZG2L_GPIO(10, 4) IRQ_TYPE_LEVEL_LOW>;
+ 
+-		adi,dsi-lanes = <4>;
++		adi,dsi-lanes = <2>;	/* 2 lanes: max ~1280x800@60 */
+ 
+ 		ports {
+ 			#address-cells = <1>;
+-- 
+2.50.1.windows.1
+

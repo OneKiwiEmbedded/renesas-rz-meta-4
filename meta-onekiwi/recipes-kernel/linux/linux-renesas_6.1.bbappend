@@ -16,3 +16,9 @@ COMPATIBLE_MACHINE:onekiwi-rzv2h-8gb = "onekiwi-rzv2h-8gb"
 FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
 SRC_URI:append:onekiwi-rzv2h-4gb = " file://onekiwi-rzv2h.cfg"
 SRC_URI:append:onekiwi-rzv2h-8gb = " file://onekiwi-rzv2h.cfg"
+
+# 4GB board on the ADV7535 carrier: 2 MIPI DSI lanes + USB-to-HDMI (udl)
+SRC_URI:append:onekiwi-rzv2h-4gb = " \
+    file://0001-onekiwi-rzv2h-4gb-adv7535-2-dsi-lanes.patch \
+    file://onekiwi-rzv2h-4gb-udl.cfg \
+"
