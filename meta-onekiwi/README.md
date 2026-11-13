@@ -18,7 +18,7 @@ Board support for the OneKiwi RZ/V2H SOM on top of Renesas `meta-rz-bsp` / `meta
 |---|---|---|
 | Linux | `OneKiwiEmbedded/renesas-rz-linux-4` | `rz-6.1-cip43` |
 | U-Boot | `OneKiwiEmbedded/renesas-rz-uboot-4` | `v2024.07/rz_dev_v2h` |
-| TF-A | `OneKiwiEmbedded/renesas-rz-atf-4` | `8160111194f7` (branch `2.10.5/rzv2h_1.1.0`) |
+| TF-A | `OneKiwiEmbedded/renesas-rz-atf-4` | `9c0f8dd83fde` (branch `2.10.5/rzv2h_1.1.0`) |
 
 ## Layer contents
 
@@ -28,7 +28,7 @@ Board support for the OneKiwi RZ/V2H SOM on top of Renesas `meta-rz-bsp` / `meta
 | `conf/templates/` | `bblayers.conf` / `local.conf` per board (copy into `build/conf/`) |
 | `recipes-kernel/linux/linux-renesas_6.1.bbappend` | Kernel source for OneKiwi boards |
 | `recipes-bsp/u-boot/u-boot_2024.07.bbappend` | U-Boot source for OneKiwi boards |
-| `recipes-bsp/trusted-firmware-a/trusted-firmware-a_2.10.bbappend` | TF-A source for OneKiwi boards (`TFA_BOARD` is set in the machine conf, currently `evk_1`) |
+| `recipes-bsp/trusted-firmware-a/trusted-firmware-a_2.10.bbappend` | TF-A source for OneKiwi boards (`TFA_BOARD = onekiwi_8gb`, set in the machine conf) |
 | `dynamic-layers/meta-rz-isp/` | Allow the meta-rz-isp recipes on OneKiwi machines (used only when meta-rz-isp is present) |
 | `recipes-rtl8821au/` | RTL8821AU USB Wi-Fi driver (add `rtl8821au` to `IMAGE_INSTALL` to use) |
 | `recipes-userfiles/` | Sample audio files in `/home/root` (add `userfiles` to `IMAGE_INSTALL` to use) |
