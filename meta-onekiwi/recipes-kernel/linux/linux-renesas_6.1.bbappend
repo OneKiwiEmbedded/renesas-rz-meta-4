@@ -11,3 +11,8 @@ KERNEL_REV:onekiwi-rzv2h-8gb = "${AUTOREV}"
 
 COMPATIBLE_MACHINE:onekiwi-rzv2h-4gb = "onekiwi-rzv2h-4gb"
 COMPATIBLE_MACHINE:onekiwi-rzv2h-8gb = "onekiwi-rzv2h-8gb"
+
+# Board kernel options (config fragment)
+FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
+SRC_URI:append:onekiwi-rzv2h-4gb = " file://onekiwi-rzv2h.cfg"
+SRC_URI:append:onekiwi-rzv2h-8gb = " file://onekiwi-rzv2h.cfg"
