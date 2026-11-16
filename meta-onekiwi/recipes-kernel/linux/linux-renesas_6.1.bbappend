@@ -1,6 +1,7 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
 
 SRC_URI += " \
+    file://onekiwi-rzv2h-4gb.dts \
     file://onekiwi-rzv2h-8gb.dts \
     file://onekiwi-rzv2h-16gb.dts \
     file://onekiwi-rzv2h-dev.dts \
@@ -24,6 +25,10 @@ do_configure:prepend() {
         echo "dtb-\$(CONFIG_ARCH_R9A09G057) += onekiwi-rzv2h-8gb.dtb" >> ${S}/arch/arm64/boot/dts/renesas/Makefile
         echo "dtb-\$(CONFIG_ARCH_R9A09G057) += onekiwi-rzv2h-16gb.dtb" >> ${S}/arch/arm64/boot/dts/renesas/Makefile
         echo "dtb-\$(CONFIG_ARCH_R9A09G057) += onekiwi-rzv2h-dev.dtb" >> ${S}/arch/arm64/boot/dts/renesas/Makefile
+    fi
+    # 4GB board (separate check so it is also added when the Makefile already has the 8GB entries)
+    if ! grep -q "onekiwi-rzv2h-4gb.dtb" ${S}/arch/arm64/boot/dts/renesas/Makefile; then
+        echo "dtb-\$(CONFIG_ARCH_R9A09G057) += onekiwi-rzv2h-4gb.dtb" >> ${S}/arch/arm64/boot/dts/renesas/Makefile
     fi
 
     # Dynamically patch CRU driver files to support IMX412 on top of Renesas ISP modifications
