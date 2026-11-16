@@ -1,0 +1,59 @@
+/* RZ/V2H ISP nodes (Input Video Control, Mali-C55 ISP, sensor/lens/iq) missing in linux-rz 6.10
+ * r9a09g057.dtsi. Appended to the dtsi by linux-rz_6.10.bbappend, same as
+ * HUONG_DAN_TICH_HOP_IMX412_ISP_UBUNTU.md step 3.6. */
+&soc {
+	input_video_control: input_video_control@16040000 {
+		compatible = "renesas,rzv2h-ivc";
+		reg = <0x0 0x16040000 0x0 0x00010000>;
+		clocks = <&cpg CPG_MOD 0xe3>;
+		clock-names = "pclk";
+		resets = <&cpg 0xd4>;
+		reset-names = "presetn";
+		interrupts = <GIC_SPI 860 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "IVC";
+		status = "disabled";
+	};
+
+	isp: isp@16080000 {
+		compatible = "arm,isp";
+		reg = <0x0 0x16080000 0x0 0x00400000>;
+		clocks = <&cpg CPG_MOD 0xe2>, <&cpg CPG_MOD 0xe4>, <&cpg CPG_MOD 0xe5>;
+		clock-names = "reg_aclk", "vin_aclk", "isp_sclk";
+		resets = <&cpg 0xd2>, <&cpg 0xd1>, <&cpg 0xd3>;
+		reset-names = "reg_aresetn", "vin_aresetn", "isp_sresetn";
+		interrupts = <GIC_SPI 859 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "ISP";
+		memory-region = <&isp_reserved>;
+		status = "disabled";
+	};
+
+	sensor: soc_sensor@16284000 {
+		compatible = "soc,sensor";
+		reg = <0x0 0x16284000 0x0 0x001000>;
+		resets = <&cpg 0xd0>;
+		reset-names = "vin_presetn";
+		interrupts = <GIC_SPI 864 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "SENSOR";
+		status = "disabled";
+	};
+
+	lens: soc_lens@16285000 {
+		compatible = "soc,lens";
+		reg = <0x0 0x16285000 0x0 0x001000>;
+		resets = <&cpg 0xd0>;
+		reset-names = "vin_presetn";
+		interrupts = <GIC_SPI 865 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "LENS";
+		status = "disabled";
+	};
+
+	iq: soc_iq@16286000 {
+		compatible = "soc,iq";
+		reg = <0x0 0x16286000 0x0 0x001000>;
+		resets = <&cpg 0xd0>;
+		reset-names = "vin_presetn";
+		interrupts = <GIC_SPI 866 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "IQ";
+		status = "disabled";
+	};
+};

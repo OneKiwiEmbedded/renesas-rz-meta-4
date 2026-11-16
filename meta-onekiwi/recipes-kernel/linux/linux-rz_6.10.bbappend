@@ -12,11 +12,19 @@ SRC_URI += " \
     file://IMX415_seq.h \
     file://IMX415_config.h \
     file://isp_config_seq.h \
+    file://rzv2h-isp-nodes.dtsi \
     file://patch_cru.py \
 "
 
 do_configure:prepend() {
     cp ${WORKDIR}/onekiwi-*.dts ${S}/arch/arm64/boot/dts/renesas/
+
+    # linux-rz 6.10 r9a09g057.dtsi has no ISP nodes (input_video_control, isp, sensor, lens, iq)
+    # but the OneKiwi DTS use them -> append them once (HUONG_DAN_TICH_HOP_IMX412_ISP_UBUNTU.md step 3.6)
+    if ! grep -q "input_video_control:" ${S}/arch/arm64/boot/dts/renesas/r9a09g057.dtsi; then
+        echo "" >> ${S}/arch/arm64/boot/dts/renesas/r9a09g057.dtsi
+        cat ${WORKDIR}/rzv2h-isp-nodes.dtsi >> ${S}/arch/arm64/boot/dts/renesas/r9a09g057.dtsi
+    fi
 
     if ! grep -q "onekiwi-rzv2h-8gb.dtb" ${S}/arch/arm64/boot/dts/renesas/Makefile; then
         echo "dtb-\$(CONFIG_ARCH_R9A09G057) += onekiwi-rzv2h-8gb.dtb" >> ${S}/arch/arm64/boot/dts/renesas/Makefile
