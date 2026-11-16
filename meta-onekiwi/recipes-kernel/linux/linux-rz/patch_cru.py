@@ -39,27 +39,40 @@ if __name__ == "__main__":
     ]
     patch_file(core_c, core_patches)
     
-    # 2. Patch rzg2l-csi2.c (expand RZG2L_CSI2_MAX_WIDTH, force-disable DESKEW and adjust hssettle)
+    # 2. Patch rzg2l-csi2.c (expand RZG2L_CSI2_MAX_WIDTH and force-disable DESKEW)
     csi2_c = os.path.join(kernel_dir, "drivers/media/platform/renesas/rzg2l-cru/rzg2l-csi2.c")
     csi2_patches = [
         (r'#define\s+RZG2L_CSI2_MAX_WIDTH\s+\d+', '#define RZG2L_CSI2_MAX_WIDTH 4095'),
         # Force disable deskew by substituting set with clr (supports both kernel 5.10 and 6.1 naming)
         (r'rzg2l_csi2_set\s*\(\s*(priv|csi2)\s*,\s*(DPHY_S_DPHYCTL_MSB|CRUm_S_DPHYCTL_MSB)\s*,\s*(DPHY_S_DPHYCTL_MSB_DESKEW|CRUm_S_DPHYCTL_MSB_DESKEW)\s*\);',
-         r'rzg2l_csi2_clr(\1, \2, \3);'),
-        # Increase hssettle for 1000 Mbps to 30 for clean signal lock without glitches
-        (r'\{\s*1030\s*,\s*22\s*\},', '{ 1030, 30 },')
+         r'rzg2l_csi2_clr(\1, \2, \3);')
     ]
     patch_file(csi2_c, csi2_patches)
     
     # 3. Patch rzg2l-video.c (inject RAW_CRU10 packing stride calculation)
     video_c = os.path.join(kernel_dir, "drivers/media/platform/renesas/rzg2l-cru/rzg2l-video.c")
     
-    # Look for v4l2_fill_pixfmt(pix, pix->pixelformat, pix->width, pix->height); inside rzg2l_cru_format_align
     video_patches = [
+        # Kernel 6.10: bytesperline and sizeimage with margin lines
+        (r'pix->bytesperline\s*=\s*pix->width\s*\*\s*fmt->bpp;\s*if\s*\(pix->pixelformat\s*==\s*V4L2_PIX_FMT_NV16\)\s*pix->sizeimage\s*=\s*pix->bytesperline\s*\*\s*pix->height\s*\*\s*2;\s*else\s*pix->sizeimage\s*=\s*pix->bytesperline\s*\*\s*pix->height;',
+         '''pix->bytesperline = ALIGN(pix->width * fmt->bpp, 128);
+	if (pix->pixelformat == V4L2_PIX_FMT_NV16)
+		pix->sizeimage = pix->bytesperline * pix->height * 2;
+	else
+		pix->sizeimage = pix->bytesperline * (pix->height + 64);'''),
+        # Kernel 6.10: IRQ dma_size check (allow up to buffer boundary)
+        (r'if\s*\(\(\(long\)dma_size\)\s*&&\s*dma_size\s*<=\s*cru->format\.sizeimage\)',
+         'if (((long)dma_size > 0) && dma_size <= cru->format.sizeimage + 0x200000)'),
+        # Kernel 6.10: stride check
+        (r'stride\s*=\s*cru->format\.bytesperline;\s*if\s*\(\s*stride\s*%\s*128\s*\)\s*\{\s*spin_unlock_irqrestore\(&cru->qlock,\s*flags\);\s*dev_err\(cru->dev,\s*"Bytesperline must be multiple of 128 bytes\\n"\);\s*return\s*-EINVAL;\s*\}\s*stride\s*=\s*stride\s*/\s*128;\s*rzg2l_cru_write\(cru,\s*AMnIS,\s*AMnIS_IS\(stride\)\);',
+         '''stride = ALIGN(cru->format.bytesperline, 128);
+		stride = stride / 128;
+		rzg2l_cru_write(cru, AMnIS, AMnIS_IS(stride));'''),
+        # Kernel 6.1 / legacy pattern
         (r'v4l2_fill_pixfmt\s*\(\s*pix\s*,\s*pix->pixelformat\s*,\s*pix->width\s*,\s*pix->height\s*\);',
          '''if (pix->pixelformat == V4L2_PIX_FMT_RAW_CRU10) {
 		pix->bytesperline = ALIGN(pix->width * 5 / 4, 128);
-		pix->sizeimage = pix->bytesperline * pix->height + 128;
+		pix->sizeimage = pix->bytesperline * (pix->height + 64);
 	} else {
 		v4l2_fill_pixfmt(pix, pix->pixelformat, pix->width, pix->height);
 		if (pix->pixelformat == V4L2_PIX_FMT_SRGGB10 ||
@@ -68,66 +81,13 @@ if __name__ == "__main__":
 		    pix->pixelformat == V4L2_PIX_FMT_SBGGR10) {
 			pix->bytesperline = ((pix->width + 11) / 12) * 16;
 		}
-		/* CRITICAL: RZ/G2L CRU AMnIS register requires 128-byte alignment for ALL formats */
 		pix->bytesperline = ALIGN(pix->bytesperline, 128);
 		pix->sizeimage = pix->bytesperline * pix->height;
-	}''')
+	}'''),
+        (r'if\s*\(\(stride\s*%\s*128\)\s*==\s*0\)\s*\{\s*stride\s*=\s*stride\s*/\s*128;\s*rzg2l_cru_write\(cru,\s*AMnIS,\s*AMnIS_IS\(stride\)\);\s*\}\s*else\s*\{[^}]+return\s*-EINVAL;\s*\}',
+         '''stride = ALIGN(cru->format.bytesperline, 128);
+		rzg2l_cru_write(cru, AMnIS, AMnIS_IS(stride / 128));''')
     ]
     patch_file(video_c, video_patches)
-
-    # 4. Patch rzg2l-ip.c (add standard RAW10 formats mapping)
-    ip_c = os.path.join(kernel_dir, "drivers/media/platform/renesas/rzg2l-cru/rzg2l-ip.c")
-    ip_patches = [
-        (r'\{\s*\.codes\s*=\s*\{\s*MEDIA_BUS_FMT_SBGGR10_1X10,\s*MEDIA_BUS_FMT_SGBRG10_1X10,\s*MEDIA_BUS_FMT_SGRBG10_1X10,\s*MEDIA_BUS_FMT_SRGGB10_1X10\s*\},\s*\.format\s*=\s*V4L2_PIX_FMT_RAW_CRU10,\s*\.datatype\s*=\s*MIPI_CSI2_DT_RAW10,\s*\.icndmr\s*=\s*0,\s*\.fmt_types\s*=\s*V4L2_PIXEL_ENC_BAYER,\s*\},',
-         '''{
-		.codes = {
-			MEDIA_BUS_FMT_SBGGR10_1X10,
-			MEDIA_BUS_FMT_SGBRG10_1X10,
-			MEDIA_BUS_FMT_SGRBG10_1X10,
-			MEDIA_BUS_FMT_SRGGB10_1X10
-		},
-		.format = V4L2_PIX_FMT_RAW_CRU10,
-		.datatype = MIPI_CSI2_DT_RAW10,
-		.icndmr = 0,
-		.fmt_types = V4L2_PIXEL_ENC_BAYER,
-	},
-	{
-		.codes = {
-			MEDIA_BUS_FMT_SRGGB10_1X10,
-		},
-		.format = V4L2_PIX_FMT_SRGGB10,
-		.datatype = MIPI_CSI2_DT_RAW10,
-		.icndmr = 0,
-		.fmt_types = V4L2_PIXEL_ENC_BAYER,
-	},
-	{
-		.codes = {
-			MEDIA_BUS_FMT_SGRBG10_1X10,
-		},
-		.format = V4L2_PIX_FMT_SGRBG10,
-		.datatype = MIPI_CSI2_DT_RAW10,
-		.icndmr = 0,
-		.fmt_types = V4L2_PIXEL_ENC_BAYER,
-	},
-	{
-		.codes = {
-			MEDIA_BUS_FMT_SGBRG10_1X10,
-		},
-		.format = V4L2_PIX_FMT_SGBRG10,
-		.datatype = MIPI_CSI2_DT_RAW10,
-		.icndmr = 0,
-		.fmt_types = V4L2_PIXEL_ENC_BAYER,
-	},
-	{
-		.codes = {
-			MEDIA_BUS_FMT_SBGGR10_1X10,
-		},
-		.format = V4L2_PIX_FMT_SBGGR10,
-		.datatype = MIPI_CSI2_DT_RAW10,
-		.icndmr = 0,
-		.fmt_types = V4L2_PIXEL_ENC_BAYER,
-	},''')
-    ]
-    patch_file(ip_c, ip_patches)
 
     print("Cru driver patch script finished!")
