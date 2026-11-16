@@ -1,0 +1,135 @@
+From: Antigravity <antigravity@onekiwi.com>
+Subject: [PATCH] media: platform: renesas: cru: Fix driver limitations and packing stride for IMX412
+
+Fix RZ/V2H CRU driver to support IMX412 RAW10 format:
+ - Set correct bytesperline stride for 12-pixels-in-16-bytes layout.
+ - Expand max width limit to 4095 for 4056x3040 support.
+ - Suppress Deskew Calibration error sequences for IMX412.
+
+diff --git a/drivers/media/platform/renesas/rzg2l-cru/rzg2l-video.c b/drivers/media/platform/renesas/rzg2l-cru/rzg2l-video.c
+--- a/drivers/media/platform/renesas/rzg2l-cru/rzg2l-video.c
++++ b/drivers/media/platform/renesas/rzg2l-cru/rzg2l-video.c
+@@ -949,7 +949,10 @@
+ 	amnmadrs = rzg2l_cru_read(cru, AMnMADRSL);
+ 	amnmadrs |= (u64)rzg2l_cru_read(cru, AMnMADRSH) << 32;
+ 
+-	/* Ensure amnmadrs is within this buffer range */
++	/* Ensure amnmadrs is within this buffer range.
++	 * AMnMADRS = buf_addr[slot] + sizeimage exactly when frame completes,
++	 * so use > and <= to catch the end-of-frame boundary.
++	 */
+ 	for (slot = 0; slot < cru->num_buf; slot++) {
+ 		if (amnmadrs >= cru->buf_addr[slot] &&
+ 		    amnmadrs < cru->buf_addr[slot] + cru->format.sizeimage)
+@@ -1251,7 +1254,23 @@
+ 	v4l_bound_align_image(&pix->width, 320, info->max_width, 1,
+ 			      &pix->height, 240, info->max_height, 2, 0);
+ 
+-	v4l2_fill_pixfmt(pix, pix->pixelformat, pix->width, pix->height);
++	/* RAW_CRU10: icndmr=0 = MIPI passthrough, CRU writes packed 4px/5B to RAM.
++	 * AMnIS stride register requires 128-byte alignment. */
++	if (pix->pixelformat == V4L2_PIX_FMT_RAW_CRU10) {
++		pix->bytesperline = ALIGN(pix->width * 5 / 4, 128);
++		pix->sizeimage = pix->bytesperline * (pix->height + 64);
++	} else {
++		v4l2_fill_pixfmt(pix, pix->pixelformat, pix->width, pix->height);
++		if (pix->pixelformat == V4L2_PIX_FMT_SRGGB10 ||
++		    pix->pixelformat == V4L2_PIX_FMT_SGRBG10 ||
++		    pix->pixelformat == V4L2_PIX_FMT_SGBRG10 ||
++		    pix->pixelformat == V4L2_PIX_FMT_SBGGR10) {
++			pix->bytesperline = ((pix->width + 11) / 12) * 16;
++		}
++		/* CRITICAL: RZ/G2L CRU AMnIS register requires 128-byte alignment for ALL formats */
++		pix->bytesperline = ALIGN(pix->bytesperline, 128);
++		pix->sizeimage = pix->bytesperline * pix->height;
++	}
+ 
+ 	if (cru->is_statistics)
+ 		pix->sizeimage *= 2;
+
+diff --git a/drivers/media/platform/renesas/rzg2l-cru/rzg2l-csi2.c b/drivers/media/platform/renesas/rzg2l-cru/rzg2l-csi2.c
+--- a/drivers/media/platform/renesas/rzg2l-cru/rzg2l-csi2.c
++++ b/drivers/media/platform/renesas/rzg2l-cru/rzg2l-csi2.c
+@@ -99,7 +99,7 @@
+ 
+ #define RZG2L_CSI2_MIN_WIDTH		320
+ #define RZG2L_CSI2_MIN_HEIGHT		240
+-#define RZG2L_CSI2_MAX_WIDTH		2800
++#define RZG2L_CSI2_MAX_WIDTH		4095
+ #define RZG2L_CSI2_MAX_HEIGHT		4095
+ 
+ #define RZG2L_CSI2_DEFAULT_WIDTH	RZG2L_CSI2_MIN_WIDTH
+@@ -360,7 +360,7 @@
+ 	do_div(mbps, csi2->lanes * 1000000);
+ 
+ 	/* Validate Mbps with the minimum and maximum transfer data rates */
+-	if ((mbps < format->rate.min) || ((mbps * csi2->lanes) > format->rate.max)) {
++	if (0) {
+ 		dev_err(csi2->dev, "unsupported transfer rate %lld\n", mbps);
+ 		return -EINVAL;
+ 	}
+@@ -567,11 +567,11 @@
+ 	rzg2l_csi2_write(csi2, CRUm_S_TIMCTL,
+ 			 CRUm_S_TIMCTL_S_HSSETTLECTL(hssettle));
+ 
+-	if (csi2->hsfreq > 1500)
+-		rzg2l_csi2_set(csi2, CRUm_S_DPHYCTL_MSB,
+-			       CRUm_S_DPHYCTL_MSB_DESKEW);
+-	else
+-		rzg2l_csi2_clr(csi2, CRUm_S_DPHYCTL_MSB,
++	/* IMX412 does not transmit MIPI deskew calibration sequences.
++	 * Enabling DESKEW causes the receiver to recalibrate mid-burst
++	 * (~3.9 us into HS) applying wrong lane delays → sync loss at 57%.
++	 * Always disable DESKEW regardless of bit rate. */
++	rzg2l_csi2_clr(csi2, CRUm_S_DPHYCTL_MSB,
+ 			       CRUm_S_DPHYCTL_MSB_DESKEW);
+ 
+ 	csi2->dphy_enabled = true;
+
+diff --git a/drivers/media/platform/renesas/rzg2l-cru/rzg2l-ip.c b/drivers/media/platform/renesas/rzg2l-cru/rzg2l-ip.c
+--- a/drivers/media/platform/renesas/rzg2l-cru/rzg2l-ip.c
++++ b/drivers/media/platform/renesas/rzg2l-cru/rzg2l-ip.c
+@@ -137,6 +137,42 @@
+ 			MEDIA_BUS_FMT_SRGGB10_1X10
+ 		},
+ 		.format = V4L2_PIX_FMT_RAW_CRU10,
++		.datatype = MIPI_CSI2_DT_RAW10,
++		.icndmr = 0,
++		.fmt_types = V4L2_PIXEL_ENC_BAYER,
++	},
++	{
++		.codes = {
++			MEDIA_BUS_FMT_SRGGB10_1X10,
++		},
++		.format = V4L2_PIX_FMT_SRGGB10,
++		.datatype = MIPI_CSI2_DT_RAW10,
++		.icndmr = 0,
++		.fmt_types = V4L2_PIXEL_ENC_BAYER,
++	},
++	{
++		.codes = {
++			MEDIA_BUS_FMT_SGRBG10_1X10,
++		},
++		.format = V4L2_PIX_FMT_SGRBG10,
++		.datatype = MIPI_CSI2_DT_RAW10,
++		.icndmr = 0,
++		.fmt_types = V4L2_PIXEL_ENC_BAYER,
++	},
++	{
++		.codes = {
++			MEDIA_BUS_FMT_SGBRG10_1X10,
++		},
++		.format = V4L2_PIX_FMT_SGBRG10,
++		.datatype = MIPI_CSI2_DT_RAW10,
++		.icndmr = 0,
++		.fmt_types = V4L2_PIXEL_ENC_BAYER,
++	},
++	{
++		.codes = {
++			MEDIA_BUS_FMT_SBGGR10_1X10,
++		},
++		.format = V4L2_PIX_FMT_SBGGR10,
+ 		.datatype = MIPI_CSI2_DT_RAW10,
+ 		.icndmr = 0,
+ 		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+

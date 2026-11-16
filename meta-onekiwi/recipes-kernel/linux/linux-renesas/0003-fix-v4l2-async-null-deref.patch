@@ -1,0 +1,20 @@
+From: OneKiwi <support@onekiwi.com>
+Subject: [PATCH] media: v4l2-async: Fix NULL pointer dereference in match_fwnode
+
+When a virtual or platform subdev without a firmware node (sd->fwnode is NULL,
+such as soc_sensor in Mali-C55 ISP) is registered, match_fwnode() is called
+against existing notifiers.
+Evaluating sd->fwnode->secondary causes a kernel NULL pointer dereference crash.
+Fix this by checking !sd->fwnode before accessing sd->fwnode->secondary.
+
+--- a/drivers/media/v4l2-core/v4l2-async.c
++++ b/drivers/media/v4l2-core/v4l2-async.c
+@@ -153,7 +153,7 @@ static bool match_fwnode(struct v4l2_async_notifier *notifier,
+ 		return true;
+ 
+ 	/* Also check the secondary fwnode. */
+-	if (IS_ERR_OR_NULL(sd->fwnode->secondary))
++	if (!sd->fwnode || IS_ERR_OR_NULL(sd->fwnode->secondary))
+ 		return false;
+ 
+ 	return match_fwnode_one(notifier, sd, sd->fwnode->secondary, asd);

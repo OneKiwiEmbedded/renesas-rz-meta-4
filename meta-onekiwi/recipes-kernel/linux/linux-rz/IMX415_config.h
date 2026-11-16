@@ -1,0 +1,7 @@
+#ifndef IMX415_CONFIG_H
+#define IMX415_CONFIG_H
+
+#define SENSOR_DEV_ADDRESS 26
+#define SENSOR_OUTPUT_BITS 10
+
+#endif /* IMX415_CONFIG_H */
