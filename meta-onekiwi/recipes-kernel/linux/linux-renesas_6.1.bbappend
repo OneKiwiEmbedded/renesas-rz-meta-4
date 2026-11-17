@@ -7,6 +7,7 @@ SRC_URI += " \
     file://onekiwi-rzv2h-dev.dts \
     file://udl.cfg \
     file://ubuntu-features.cfg \
+    file://onekiwi-rzv2h.cfg \
     file://0003-fix-v4l2-async-null-deref.patch \
     file://imx415.c \
     file://IMX415_drv.c \
