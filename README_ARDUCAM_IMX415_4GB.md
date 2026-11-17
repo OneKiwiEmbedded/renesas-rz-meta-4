@@ -2,6 +2,14 @@
 
 Lập 2026-11-18. **Chưa build, chưa test trên board.**
 
+Lịch sử phần Arducam:
+- SDK 5.2 (kernel 5.10): đã sửa và **test chạy được** với Arducam IMX415.
+- SDK 6.0 (kernel 6.1 + ISP): port lại từ 5.2 (merge 3 chiều vào driver IMX415 của `meta-rz-isp`), **chưa test trên board**.
+- Bản Ubuntu này lấy đúng phần SDK 6.0 đó, nên lần test này cũng là lần đầu chạy Arducam trên kernel 6.1 + ISP.
+- Renesas gốc chỉ test với module IMX415 của Renesas (INCK 74.25 MHz, 891 Mbps, địa chỉ `0x1a`), không phải Arducam.
+
+Nếu lỗi, so với bản 5.2 đã chạy (`SOM_5.2_V2H_dunfell/meta-renesas-imx415-arduicam`): `imx415.c` (bảng clock 24 MHz, mode 720 Mbps, thứ tự bật nguồn/XCLR), DTS (`0x37`, `P3_0`, `P3_1`, link-frequencies), `rzg2l-csi2.c` (tốc độ D-PHY).
+
 Bản này giống hệt `UBUNTU_SOM/claude/meta-renesas` (Ubuntu 24.04, board 4GB, TF-A `onekiwi_8gb`, U-Boot 4GB, HDMI ADV7535 2 lane), chỉ đổi camera **IMX412 (gremsy, 600MHz)** thành **Arducam IMX415**. Phần camera lấy từ bản Yocto SDK 6.0 Arducam (`renesas-rz-meta-4`, nhánh `sdk60-imx415-arducam-adv-4gb`), đã chạy với kernel 6.1 + ISP.
 
 **Chỉ dùng với kernel 6.1** (`PREFERRED_PROVIDER_virtual/kernel = "linux-renesas"` trong `local.conf`). Phần kernel 6.10 (`linux-rz`) trong meta này vẫn là IMX412 và không có ISP.
