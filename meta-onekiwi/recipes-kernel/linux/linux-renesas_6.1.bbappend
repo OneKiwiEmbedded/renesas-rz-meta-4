@@ -1,5 +1,9 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
 
+# Arducam IMX415 variant: the kernel uses the Renesas IMX415 driver and ISP sensor
+# files from meta-rz-isp, plus the Arducam driver patch applied in
+# dynamic-layers/meta-rz-isp (24 MHz INCK, 720 Mbps). The IMX412 (gremsy) driver
+# overrides of the IMX412 meta are NOT used here.
 SRC_URI += " \
     file://onekiwi-rzv2h-4gb.dts \
     file://onekiwi-rzv2h-8gb.dts \
@@ -9,12 +13,6 @@ SRC_URI += " \
     file://ubuntu-features.cfg \
     file://onekiwi-rzv2h.cfg \
     file://0003-fix-v4l2-async-null-deref.patch \
-    file://imx415.c \
-    file://IMX415_drv.c \
-    file://IMX415_seq.h \
-    file://IMX415_config.h \
-    file://isp_config_seq.h \
-    file://patch_cru.py \
 "
 
 do_configure:prepend() {
@@ -31,21 +29,4 @@ do_configure:prepend() {
     if ! grep -q "onekiwi-rzv2h-4gb.dtb" ${S}/arch/arm64/boot/dts/renesas/Makefile; then
         echo "dtb-\$(CONFIG_ARCH_R9A09G057) += onekiwi-rzv2h-4gb.dtb" >> ${S}/arch/arm64/boot/dts/renesas/Makefile
     fi
-
-    # Dynamically patch CRU driver files to support IMX412 on top of Renesas ISP modifications
-    python3 ${WORKDIR}/patch_cru.py ${S}
-
-    # Override IMX415 sensor driver in kernel with IMX412 code
-    cp ${WORKDIR}/imx415.c ${S}/drivers/media/i2c/imx415.c
-
-    # Override ISP sensor driver wrapper in kernel with IMX412 configuration
-    ISP_SENSOR_DIR=${S}/drivers/media/platform/renesas/rzv2h-isp/subdev/sensor/src/driver/sensor
-    cp ${WORKDIR}/IMX415_drv.c ${ISP_SENSOR_DIR}/
-    cp ${WORKDIR}/IMX415_seq.h ${ISP_SENSOR_DIR}/
-    cp ${WORKDIR}/IMX415_config.h ${ISP_SENSOR_DIR}/
-
-    # Copy IMX412 ISP configuration & Color Correction Matrix (CCM)
-    ISP_FWLIB_DIR=${S}/drivers/media/platform/renesas/rzv2h-isp/v4l2_dev/src/fw_lib
-    mkdir -p ${ISP_FWLIB_DIR}
-    cp ${WORKDIR}/isp_config_seq.h ${ISP_FWLIB_DIR}/
 }

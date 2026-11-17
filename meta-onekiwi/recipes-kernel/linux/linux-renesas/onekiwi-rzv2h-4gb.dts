@@ -613,16 +613,13 @@
 	status = "okay";
 };
 
+/* ISP: one Arducam IMX415 on CSI20, CRU0 + CRU1 (as OneKiwi SDK 5.2 / 6.0 Arducam) */
 &input_video_control {
 	status = "okay";
-	crus = <&cru0>;
+	crus = <&cru0 &cru1>;
 };
 
 &csi21 {
-	status = "disabled";
-};
-
-&cru1 {
 	status = "disabled";
 };
 
@@ -710,25 +707,29 @@
 &i2c6_csi0 {
 	status = "okay";
 
-    imx415a: imx415@1a {
-        compatible = "sony,imx415";
-        reg = <0x1a>;
-        clock-names = "inck";
-        clocks = <&clk_imx412_camera>;
-        clock-frequency = <24000000>;
-        dovdd-supply = <&imx415_ovdd_1v8>;
-        avdd-supply = <&imx415_avdd_2v9>;
-        dvdd-supply = <&imx415_dvdd_1v1>;
-        reset-gpios = <&pinctrl RZG2L_GPIO(3, 1) GPIO_ACTIVE_LOW>;
-        port {
-            imx415a_to_csi20: endpoint {
-                clock-lanes = <0>;
-                data-lanes = <1 2 3 4>;
-                link-frequencies = /bits/ 64 <600000000>;
-                remote-endpoint = <&csi20_in>;
-            };
-        };
-    };
+	/* Arducam IMX415 module: I2C 0x37, 24 MHz INCK, 4 lanes x 720 Mbps
+	 * (same as the OneKiwi SDK 5.2 / 6.0 Arducam 4GB DTS) */
+	imx415a: imx415@37 {
+		compatible = "sony,imx415";
+		reg = <0x37>;
+		status = "okay";
+		clock-names = "inck";
+		clocks = <&clk_imx412_camera>;	/* fixed 24 MHz clock */
+		ovdd-supply = <&imx415_ovdd_1v8>;
+		avdd-supply = <&imx415_avdd_2v9>;
+		dvdd-supply = <&imx415_dvdd_1v1>;
+		reset-gpios = <&pinctrl RZG2L_GPIO(3, 0) GPIO_ACTIVE_LOW>;	/* XCLR */
+
+		port {
+			imx415a_to_csi20: endpoint {
+				clock-lanes = <0>;
+				data-lanes = <1 2 3 4>;
+				/* 720 Mbps/lane (24 MHz INCK mode in imx415.c) */
+				link-frequencies = /bits/ 64 <360000000 360000000 360000000 360000000>;
+				remote-endpoint = <&csi20_in>;
+			};
+		};
+	};
 };
 
 &i2c7_soft {
@@ -1105,12 +1106,12 @@
 
 &pinctrl {
 	/* cam0_pwr_en is used by Google Coral Camera from CSI20 and CSI21 */
-	// cam0_pwr_en {
-	// 	gpio-hog;
-	// 	gpios = <RZG2L_GPIO(3, 1) GPIO_ACTIVE_HIGH>;
-	// 	output-high;
-	// 	line-name = "cam0_pwr_en";
-	// };
+	cam0_pwr_en {	/* Arducam IMX415 camera power enable */
+		gpio-hog;
+		gpios = <RZG2L_GPIO(3, 1) GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "cam0_pwr_en";
+	};
 
 	can2_pins: can2 {
 		pinmux = <RZG2L_PORT_PINMUX(8,5,5)>, /* CAN2_RX */
