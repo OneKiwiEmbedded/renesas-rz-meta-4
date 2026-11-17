@@ -922,11 +922,12 @@
 	pinctrl-0 = <&sdhi1_pins>;
 	pinctrl-names = "default";
 	vmmc-supply = <&vmmc_sdhi1>;
-	//vqmmc-supply = <&vccq_sdhi1>;
-	vqmmc-supply = <&reg_1p8v>;
+	/* 4GB carrier: microSD 3.3V high-speed only, no I/O voltage switch
+	 * (same as the OneKiwi SDK 5.2/6.0 4GB DTS) */
 	bus-width = <4>;
-	sd-uhs-sdr50;
-	sd-uhs-sdr104;
+	cap-sd-highspeed;
+	max-frequency = <50000000>;
+	no-1-8-v;
 	status = "okay";
 };
 
