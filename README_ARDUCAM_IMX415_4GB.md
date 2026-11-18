@@ -65,3 +65,11 @@ ls -l /dev/ac_isp /dev/video*fr
 bash /root/v4l2-init.sh                  # bản mẫu IMX415 của meta-rz-isp có trong image
 ```
 Tool chỉnh màu (act-server) dùng giống bản IMX412.
+
+## Kết quả test 2026-11-19
+
+- Arducam IMX415 chạy trên board 4GB: `Detected IMX415`, ISP `addr = 37`, màu bình thường.
+- `v4l2-ctl`: 25 fps ở 720p / 1080p / 4K.
+- HDMI `kmssink driver-name=rzg2l-du connector-id=43`, 1920x1080 NV12: **25.0 fps, dropped 0** (nhờ patch `0002-rzv2h-isp-min-capture-buffers.patch`; trước đó 18.75 fps).
+- 30 fps cần chế độ cảm biến khác (1440 Mbps hoặc 2K binning).
+- Image Ubuntu thiếu: `/usr/bin/mali_iv021_isp*.elf` (chép từ `meta-rz-isp`), `libgstkms.so` (lấy từ gói Ubuntu `gstreamer1.0-plugins-bad` 1.24.2). Weston hỏng (thiếu `libexec_weston.so.0`).
