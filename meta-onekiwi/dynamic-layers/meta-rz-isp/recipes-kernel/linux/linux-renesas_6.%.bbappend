@@ -8,9 +8,9 @@ COMPATIBLE_MACHINE:onekiwi-rzv2h-4gb = "onekiwi-rzv2h-4gb"
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
 ONEKIWI_LATE_PATCHES ?= ""
-ONEKIWI_LATE_PATCHES:onekiwi-rzv2h-4gb = "0001-imx415-arducam-24mhz-720mbps-driver.patch"
+ONEKIWI_LATE_PATCHES:onekiwi-rzv2h-4gb = "0001-imx415-arducam-24mhz-720mbps-driver.patch 0002-rzv2h-isp-min-capture-buffers.patch"
 
-SRC_URI:append:onekiwi-rzv2h-4gb = " file://0001-imx415-arducam-24mhz-720mbps-driver.patch;apply=no"
+SRC_URI:append:onekiwi-rzv2h-4gb = " file://0001-imx415-arducam-24mhz-720mbps-driver.patch;apply=no file://0002-rzv2h-isp-min-capture-buffers.patch;apply=no"
 
 do_patch[postfuncs] += "onekiwi_apply_late_patches"
 onekiwi_apply_late_patches() {

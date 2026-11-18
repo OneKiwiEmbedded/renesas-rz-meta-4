@@ -1,0 +1,42 @@
+From: quangdinhxuan <quangcoi186@gmail.com>
+Subject: [PATCH] media: rzv2h-isp: report V4L2_CID_MIN_BUFFERS_FOR_CAPTURE
+
+GStreamer v4l2src allocates only 4 capture buffers on /dev/videoXfr and
+cannot allocate more later. While the pipeline holds 1-2 of them the ISP
+has no free buffer and drops one frame out of four (25 fps -> 18.75 fps,
+30 fps -> 22.5 fps; v4l2-ctl gets the full rate). Report a minimum of 6
+capture buffers so that v4l2src allocates enough.
+---
+diff --git a/drivers/media/platform/renesas/rzv2h-isp/v4l2_dev/app/v4l2_interface/isp-v4l2-ctrl.c b/drivers/media/platform/renesas/rzv2h-isp/v4l2_dev/app/v4l2_interface/isp-v4l2-ctrl.c
+index 39cd8be21..2128ebb5a 100644
+--- a/drivers/media/platform/renesas/rzv2h-isp/v4l2_dev/app/v4l2_interface/isp-v4l2-ctrl.c
++++ b/drivers/media/platform/renesas/rzv2h-isp/v4l2_dev/app/v4l2_interface/isp-v4l2-ctrl.c
+@@ -27,6 +27,11 @@
+ #include "isp-v4l2-ctrl.h"
+ #include "fw-interface.h"
+ 
++/* OneKiwi: minimum capture buffers reported to user space (see isp_v4l2_ctrl_init) */
++#ifndef ONEKIWI_ISP_MIN_CAPTURE_BUFFERS
++#define ONEKIWI_ISP_MIN_CAPTURE_BUFFERS 6
++#endif
++
+ extern int isp_fw_get_sensor_default_preset_mode(int ctx);
+ static int isp_v4l2_ctrl_check_valid( struct v4l2_ctrl *ctrl )
+ {
+@@ -1842,6 +1847,16 @@ int isp_v4l2_ctrl_init( uint32_t ctx_id, isp_v4l2_ctrl_t *ctrl )
+     ADD_CTRL_STD( V4L2_CID_FOCUS_ABSOLUTE, 0, 255, 1, 0, 0 );
+ #endif
+ 
++    /*
++     * OneKiwi: advertise the number of capture buffers the ISP needs.
++     * GStreamer v4l2src allocates only 4 buffers when this control is absent;
++     * while the pipeline holds 1-2 of them the ISP has no free buffer and drops
++     * one frame out of four (25 fps sensor -> 18.75 fps). v4l2src reads this
++     * read-only control and allocates more buffers.
++     */
++    v4l2_ctrl_new_std( hdl_std_ctrl, NULL, V4L2_CID_MIN_BUFFERS_FOR_CAPTURE,
++                       1, 32, 1, ONEKIWI_ISP_MIN_CAPTURE_BUFFERS );
++
+     /* Init and add custom controls */
+     v4l2_ctrl_handler_init( hdl_cst_ctrl, 64 );
+     v4l2_ctrl_new_custom( hdl_cst_ctrl, &isp_v4l2_ctrl_class, NULL );
