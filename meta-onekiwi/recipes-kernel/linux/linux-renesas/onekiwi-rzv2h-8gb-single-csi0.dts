@@ -773,6 +773,16 @@
 };
 
 &sdhi0 {
+	/*
+	 * Kernel 6.1 renesas_sdhi: without pinctrl states the driver assumes a
+	 * fixed 3.3V signal and fails the 1.8V switch for HS200 with -EINVAL
+	 * ("mmc0: error -22 whilst initialising MMC card", no /dev/mmcblk0).
+	 * Kernel 5.10 (SDK 5.20) had no_pin_volt_switch, so it worked there.
+	 * Same pins for both states, as the Renesas EVK does for SDHI1.
+	 */
+	pinctrl-0 = <&sdhi0_emmc_pins>;
+	pinctrl-1 = <&sdhi0_emmc_pins>;
+	pinctrl-names = "default", "state_uhs";
 	vmmc-supply = <&reg_3p3v>;
 	vqmmc-supply = <&reg_1p8v>;
 	bus-width = <8>;
@@ -980,6 +990,23 @@
 				 <RZG2L_PORT_PINMUX(3,5,2)>, /* RXD3_MISO3_SCL3 */
 				 <RZG2L_PORT_PINMUX(3,7,2)>, /* SS3_CTS3N_RTS3N */
 				 <RZG2L_PORT_PINMUX(3,4,2)>; /* TXD3_MOSI3_SDA3 */
+	};
+
+	sdhi0_emmc_pins: sd0-emmc {
+		sd0_data {
+			pins = "SD0DAT0", "SD0DAT1", "SD0DAT2", "SD0DAT3",
+			       "SD0DAT4", "SD0DAT5", "SD0DAT6", "SD0DAT7",
+			       "SD0CMD";
+			input-enable;
+			renesas,output-impedance = <3>;
+			slew-rate = <0>;
+		};
+
+		sd0_ctrl {
+			pins = "SD0CLK", "SD0RSTN";
+			renesas,output-impedance = <3>;
+			slew-rate = <0>;
+		};
 	};
 
 	sdhi1_pins: sd1 {
